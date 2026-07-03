@@ -1,21 +1,28 @@
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Configuração da linha de conexão com o seu MySQL local
-# IMPORTANTE: Altere 'root' e 'suasenha' para o seu usuário e senha reais do MySQL
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://root:gggg@localhost/ser_sustentavel"
+# 1. Se estiver no Railway, ele usa a URL segura da nuvem.
+SQLALCHEMY_DATABASE_URL = os.getenv(
+    "DATABASE_URL", 
+    "mysql+pymysql://root@localhost/ser_sustentavel"
+)
 
-# 1. Cria o motor que conecta o Python ao servidor MySQL
+# 2. Adaptação para o SQLAlchemy funcionar perfeitamente em produção
+if SQLALCHEMY_DATABASE_URL.startswith("mysql://"):
+    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("mysql://", "mysql+pymysql://", 1)
+
+# 3. Cria o motor de conexão
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 
-# 2. Cria a fábrica de sessões (será usada para abrir e fechar consultas ao banco)
+# 4. Configura as sessões
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# 3. Cria a classe base que o arquivo 'models.py' vai usar para mapear as tabelas
+# 5. Classe base para as tabelas
 Base = declarative_base()
 
-# 4. Função utilitária (Dependency Injection) para abrir e fechar o banco a cada requisição
+# 6. Função utilitária para abrir e fechar conexões
 def get_db():
     db = SessionLocal()
     try:

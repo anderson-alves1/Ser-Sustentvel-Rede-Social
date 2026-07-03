@@ -1,14 +1,16 @@
+import os
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 from pwdlib import PasswordHash
 from pwdlib.hashers.bcrypt import BcryptHasher
 import models
 import schemas
 
-SECRET_KEY = "chave_secreta_super_segura_do_ser_sustentavel"
+# Lendo a chave de forma segura. Se não configurada no Railway, usa o padrão.
+SECRET_KEY = os.getenv("SECRET_KEY", "chave_secreta_super_segura_do_ser_sustentavel")
 ALGORITHM = "HS256"
 TOKEN_EXPIRATION_HOURS = 24
 
@@ -59,7 +61,7 @@ class AuthController:
 
     @staticmethod
     def login_usuario(dados: schemas.UsuarioLogin, db: Session):
-        """Valida as credenciais e gera um Token JWT criptografado real e legítimo da Sprint 4."""
+        """Valida as credenciais e gera um Token JWT criptografado real e legítimo."""
         usuario = db.query(models.Usuario).filter(models.Usuario.email == dados.email).first()
         
         if not usuario or not AuthController.verificar_senha(dados.senha, usuario.senha_hash):
@@ -68,10 +70,11 @@ class AuthController:
                 detail="E-mail ou senha incorretos."
             )
         
+        # CORREÇÃO: datetime.now(timezone.utc) substitui o descontinuado utcnow()
         payload = {
             "sub": usuario.email,
             "id_usuario": usuario.id_usuario,
-            "exp": datetime.utcnow() + timedelta(hours=TOKEN_EXPIRATION_HOURS)
+            "exp": datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRATION_HOURS)
         }
         token_jwt = jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
         
@@ -89,7 +92,6 @@ class AuthController:
                 detail="Erro ao registrar a sessão de login no banco de dados."
             )
 
-        # ALTERADO: Agora envia todos os dados necessários para o Front-end
         return {
             "mensagem": "Login bem-sucedido!",
             "token_sessao": token_jwt,
