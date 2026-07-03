@@ -5,3 +5,4 @@ pymysql
 cryptography
 pwdlib[bcrypt]
 pyjwt
+email-validator
