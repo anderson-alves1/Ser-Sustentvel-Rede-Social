@@ -1,16 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 import models
 from database import get_db
 from schemas import UsuarioCadastro, UsuarioLogin, NovaPostagem, NovoComentario
-from controllers.authController import AuthController, SECRET_KEY, ALGORITHM  # Importa do Controller centralizado
+from controllers.authController import AuthController, SECRET_KEY, ALGORITHM
 import jwt
+import shutil
+import uuid
+import os
 
 router = APIRouter(prefix="/auth", tags=["Autenticação e Rede Social"])
 
-
-# --- FUNÇÃO AUXILIAR: PROTEÇÃO DE ROTAS (DEPENDÊNCIA) ---
 def obter_usuario_logado(token: str, db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -29,23 +30,29 @@ def obter_usuario_logado(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário não encontrado.")
     return usuario
 
+@router.post("/upload", status_code=status.HTTP_201_CREATED)
+def upload_arquivo(file: UploadFile = File(...)):
+    try:
+        extensao = file.filename.split(".")[-1]
+        nome_unico = f"{uuid.uuid4().hex}.{extensao}"
+        caminho_salvamento = os.path.join("uploads", nome_unico)
+        
+        with open(caminho_salvamento, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        return {"url": f"/{caminho_salvamento}"}
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao processar o upload do arquivo.")
 
-# --- ROTA DE CADASTRO ---
 @router.post("/cadastro", status_code=status.HTTP_201_CREATED)
 def cadastrar_usuario(usuario: UsuarioCadastro, db: Session = Depends(get_db)):
-    # Delega a lógica de validação e persistência para o Controller
     novo_usuario = AuthController.cadastrar_usuario(usuario, db)
     return {"mensagem": "Usuário ecológico cadastrado com sucesso!", "id_usuario": novo_usuario.id_usuario}
 
-
-# --- ROTA DE LOGIN ---
 @router.post("/login")
 def logar_usuario(usuario: UsuarioLogin, db: Session = Depends(get_db)):
-    # Delega a autenticação e geração de sessão JWT para o Controller
     return AuthController.login_usuario(usuario, db)
 
-
-# --- ROTA DE LOGOUT ---
 @router.post("/logout")
 def deslogar_usuario(token: str, db: Session = Depends(get_db)):
     sessao = db.query(models.SessaoLogin).filter(models.SessaoLogin.token_sessao == token).first()
@@ -60,8 +67,6 @@ def deslogar_usuario(token: str, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao encerrar a sessão no banco de dados.")
 
-
-# --- ROTA DO FEED DO DASHBOARD ---
 @router.get("/feed")
 def listar_feed(db: Session = Depends(get_db)):
     try:
@@ -88,8 +93,6 @@ def listar_feed(db: Session = Depends(get_db)):
     except SQLAlchemyError:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro interno ao carregar o feed do banco de dados.")
 
-
-# --- ROTA PARA CRIAR POSTAGEM ---
 @router.post("/postar", status_code=status.HTTP_201_CREATED)
 def criar_postagem(postagem: NovaPostagem, token: str, db: Session = Depends(get_db)):
     usuario_atual = obter_usuario_logado(token, db)
@@ -106,8 +109,6 @@ def criar_postagem(postagem: NovaPostagem, token: str, db: Session = Depends(get
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao criar publicação.")
 
-
-# --- ROTA PARA DELETAR POSTAGEM ---
 @router.delete("/postar/{id_postagem}")
 def deletar_postagem(id_postagem: int, token: str, db: Session = Depends(get_db)):
     usuario_atual = obter_usuario_logado(token, db)
@@ -128,8 +129,6 @@ def deletar_postagem(id_postagem: int, token: str, db: Session = Depends(get_db)
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao excluir a publicação.")
 
-
-# --- ROTA DE ECO-CURTIDAS (CURTIR/DESCUTIR) ---
 @router.post("/curtir/{id_postagem}")
 def curtir_postagem(id_postagem: int, token: str, db: Session = Depends(get_db)):
     usuario_atual = obter_usuario_logado(token, db)
@@ -157,8 +156,6 @@ def curtir_postagem(id_postagem: int, token: str, db: Session = Depends(get_db))
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao processar curtida.")
 
-
-# --- ROTA PARA CRIAR COMENTÁRIOS ---
 @router.post("/comentar/{id_postagem}", status_code=status.HTTP_201_CREATED)
 def criar_comentario(id_postagem: int, comentario: NovoComentario, token: str, db: Session = Depends(get_db)):
     usuario_atual = obter_usuario_logado(token, db)
@@ -180,8 +177,6 @@ def criar_comentario(id_postagem: int, comentario: NovoComentario, token: str, d
         db.rollback()
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Erro ao salvar comentário no banco de dados.")
 
-
-# --- ROTA DE PERFIL (MÉTRICAS DO DASHBOARD) ---
 @router.get("/perfil")
 def buscar_perfil_usuario(token: str, db: Session = Depends(get_db)):
     usuario_atual = obter_usuario_logado(token, db)
