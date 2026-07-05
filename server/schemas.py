@@ -4,14 +4,12 @@ from typing import Optional, List
 
 # --- 1. SCHEMAS DE USUÁRIO ---
 
-# Dados que o Front-end precisa enviar para cadastrar um usuário
 class UsuarioCadastro(BaseModel):
     nome: str
     email: EmailStr
     data_nascimento: date
     senha: str
 
-    # Regras de Negócio  (Validações estritas via Pydantic)
     @field_validator('senha')
     def validar_senha(cls, v):
         if len(v) < 6:
@@ -26,57 +24,66 @@ class UsuarioCadastro(BaseModel):
             raise ValueError('O usuário deve ter pelo menos 16 anos para se cadastrar.')
         return v
 
-# Dados que o Front-end envia para fazer Login
 class UsuarioLogin(BaseModel):
     email: EmailStr
     senha: str
 
-# Dados básicos do usuário para exibir como Autor de posts/comentários
 class UsuarioMinimo(BaseModel):
     id_usuario: int
     nome: str
-    avatar: Optional[str] = None  # <-- NOVO: Permite exibir a foto do usuário no feed e nos comentários
+    avatar: Optional[str] = None
 
     class Config:
         from_attributes = True
 
-# Dados que a API vai devolver no Perfil (Proteção de dados: Sem senha!)
 class UsuarioResposta(BaseModel):
     id_usuario: int
     nome: str
     email: EmailStr
-    sobre_mim: Optional[str] = None  # <-- NOVO: Retorna a biografia do usuário
-    avatar: Optional[str] = None     # <-- NOVO: Retorna a foto de perfil do usuário
+    sobre_mim: Optional[str] = None
+    avatar: Optional[str] = None
     data_criacao: datetime
+    pontos: Optional[int] = 0
 
     class Config:
         from_attributes = True
 
+# Schema para alterar configurações de conta
+class AlterarConfiguracoes(BaseModel):
+    senha_atual: str
+    novo_email: Optional[EmailStr] = None
+    nova_senha: Optional[str] = None
 
-# --- 2. SCHEMAS DE TOKEN (Autenticação JWT ) ---
+    @field_validator('nova_senha')
+    def validar_nova_senha(cls, v):
+        if v is not None and len(v) < 6:
+            raise ValueError('A nova senha deve conter pelo menos 6 caracteres.')
+        return v
 
-# Estrutura do Token devolvido após o Login bem-sucedido
+
+# --- 2. SCHEMAS DE TOKEN ---
+
 class Token(BaseModel):
-    token_sessao: str  # Casando com o nome que o seu front/banco esperam
+    token_sessao: str
     mensagem: str
-    usuario: UsuarioResposta # <-- ALTERADO: Agora usa UsuarioResposta para devolver todos os dados
+    usuario: UsuarioResposta
 
 class TokenData(BaseModel):
     email: Optional[str] = None
 
 
-# --- 3. SCHEMAS DE COMENTÁRIO ---
+# --- 3. SCHEMAS DE COMENTÁRIO (postagem) ---
 
-# Dados recebidos ao criar um comentário
 class NovoComentario(BaseModel):
     texto: str
 
-# Dados que a API retorna ao listar comentários no Feed
 class ComentarioResposta(BaseModel):
     id_comentario: int
     texto: str
     data_criacao: datetime
     autor: UsuarioMinimo
+    total_curtidas: Optional[int] = 0
+    eu_curto: Optional[bool] = False
 
     class Config:
         from_attributes = True
@@ -84,12 +91,10 @@ class ComentarioResposta(BaseModel):
 
 # --- 4. SCHEMAS DE POSTAGEM ---
 
-# Dados recebidos ao criar uma nova publicação ecológicas
 class NovaPostagem(BaseModel):
-    legenda: str       # Atualizado de 'titulo' para 'legenda' conforme o MySQL e Models
+    legenda: str
     caminho_foto: str
 
-# Estrutura completa de retorno do Card do Feed
 class PostagemResposta(BaseModel):
     id_postagem: int
     legenda: str
@@ -101,3 +106,44 @@ class PostagemResposta(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# --- 5. SCHEMAS DO FÓRUM ---
+
+class NovoTopico(BaseModel):
+    titulo: str
+    conteudo: str
+
+class NovoComentarioForum(BaseModel):
+    texto: str
+
+class ComentarioForumResposta(BaseModel):
+    id_comentario_forum: int
+    texto: str
+    data_criacao: datetime
+    autor: UsuarioMinimo
+    total_curtidas: Optional[int] = 0
+    eu_curto: Optional[bool] = False
+
+    class Config:
+        from_attributes = True
+
+class TopicoForumResposta(BaseModel):
+    id_topico: int
+    titulo: str
+    conteudo: str
+    data_criacao: datetime
+    autor: UsuarioMinimo
+    total_comentarios: Optional[int] = 0
+
+    class Config:
+        from_attributes = True
+
+
+# --- 6. SCHEMA DE PESQUISA ---
+
+class ResultadoPesquisa(BaseModel):
+    tipo: str  # "usuario" ou "publicacao" ou "topico"
+    id: int
+    titulo: str
+    subtitulo: Optional[str] = None
